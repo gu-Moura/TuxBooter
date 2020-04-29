@@ -22,7 +22,7 @@
   <property name="whatsThis">
    <string/>
   </property>
-  <widget class="QComboBox" name="comboBox">
+  <widget class="QComboBox" name="usbList">
    <property name="geometry">
     <rect>
      <x>20</x>
@@ -32,7 +32,7 @@
     </rect>
    </property>
   </widget>
-  <widget class="QLineEdit" name="lineEdit">
+  <widget class="QLineEdit" name="imgLocation">
    <property name="geometry">
     <rect>
      <x>20</x>
@@ -42,7 +42,7 @@
     </rect>
    </property>
   </widget>
-  <widget class="QToolButton" name="toolButton">
+  <widget class="QToolButton" name="fileSearch">
    <property name="geometry">
     <rect>
      <x>200</x>
@@ -55,7 +55,7 @@
     <string>...</string>
    </property>
   </widget>
-  <widget class="QToolButton" name="toolButton_2">
+  <widget class="QToolButton" name="refreshUsb">
    <property name="geometry">
     <rect>
      <x>200</x>
@@ -90,7 +90,7 @@
     <bool>false</bool>
    </property>
   </widget>
-  <widget class="QPushButton" name="pushButton">
+  <widget class="QPushButton" name="startBtn">
    <property name="geometry">
     <rect>
      <x>80</x>
@@ -106,20 +106,20 @@
   <widget class="QLabel" name="label">
    <property name="geometry">
     <rect>
-     <x>20</x>
+     <x>90</x>
      <y>20</y>
-     <width>54</width>
-     <height>14</height>
+     <width>91</width>
+     <height>20</height>
     </rect>
    </property>
    <property name="text">
-    <string>USB disk:</string>
+    <string>USB Device:</string>
    </property>
   </widget>
   <widget class="QLabel" name="label_2">
    <property name="geometry">
     <rect>
-     <x>20</x>
+     <x>90</x>
      <y>100</y>
      <width>81</width>
      <height>16</height>
@@ -132,7 +132,7 @@
   <widget class="QLabel" name="label_3">
    <property name="geometry">
     <rect>
-     <x>100</x>
+     <x>90</x>
      <y>190</y>
      <width>54</width>
      <height>14</height>

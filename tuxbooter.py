@@ -7,6 +7,7 @@ from PyQt5.uic import loadUi
 from functools import partial
 import sys
 import os
+import shutil
 import json
 
 DEBUG = True
@@ -66,6 +67,28 @@ class TuxBooter (QDialog):
     def burnImage(self):
         print(self.deviceFilePath)
         print(self.imageFilePath)
+        self.prepareDrive()
+        
+
+    def prepareDrive(self):
+        # Zeroing MBR
+        with open(self.deviceFilePath, 'wb') as usbFile, open('/dev/zero', 'rb') as zeroFile:
+            usbFile.write(zeroFile.read(512))
+            print('Zeroed')
+        
+        # Reformatting drive
+        os.system("echo ',,7;*' | sfdisk {} >/dev/null 2>&1".format(self.deviceFilePath))
+        os.system('mkfs.vfat -F32 {}1 -n {} >/dev/null 2>&1'.format(self.deviceFilePath, 'WINDOWS')) #TODO: Allow custom label
+        print('Formatted')
+
+        # Writing to MBR
+        with open(self.deviceFilePath, 'wb') as usbFile, open('/usr/lib/syslinux/mbr/mbr.bin', 'rb') as mbrFile:
+            usbFile.write(mbrFile.read(440))
+            print('MBR written')
+
+        # Installing syslinux
+        os.system("syslinux -i {}1 >/dev/null 2>&1".format(self.deviceFilePath))
+        print('Syslinux installed')
 
 
 if __name__ == "__main__":

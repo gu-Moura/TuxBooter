@@ -6,18 +6,19 @@ from PyQt5.QtWidgets import QApplication,\
 from PyQt5.uic import loadUi
 from functools import partial
 import sys
-import os
 import shutil
 import json
-
-DEBUG = True
+import sh
 
 
 
 class TuxBooter (QDialog):
-    def __init__(self):
+    def __init__(self, sudo_password):
         super(TuxBooter, self).__init__()
         loadUi('ui/mainWindow.ui', self)
+
+        #TODO: Set this on press start button (ask password)
+        self.sudo = sh.sudo.bake("-S", _in=sudo_password)
 
         # Variables
         self.deviceFilePath = ''
@@ -54,9 +55,8 @@ class TuxBooter (QDialog):
             self.imageFilePath = fileName
         
     def listAvailableDevices(self):
-        bashCommand = "lsblk -pJS -o name,tran,model,size"
-        devices = os.popen(bashCommand).read()
-        devices = json.loads(devices)
+        devices = sh.lsblk('-pJS', '-o', 'name,tran,model,size')
+        devices = json.loads(str(devices))
         usb_devices = []
         for device in devices["blockdevices"]:
             if 'usb' in device['tran']:
@@ -71,14 +71,16 @@ class TuxBooter (QDialog):
         
 
     def prepareDrive(self):
+        # We need to extend the file's permissions for a moment so we can write to it!
+        self.sudo.chmod(666, self.deviceFilePath)
         # Zeroing MBR
         with open(self.deviceFilePath, 'wb') as usbFile, open('/dev/zero', 'rb') as zeroFile:
             usbFile.write(zeroFile.read(512))
             print('Zeroed')
         
         # Reformatting drive
-        os.system("echo ',,7;*' | sfdisk {} >/dev/null 2>&1".format(self.deviceFilePath))
-        os.system('mkfs.vfat -F32 {}1 -n {} >/dev/null 2>&1'.format(self.deviceFilePath, 'WINDOWS')) #TODO: Allow custom label
+        self.sudo.bash('-c', "echo ',,c;' | sfdisk {}".format(self.deviceFilePath))
+        self.sudo.bash('-c', 'mkfs.vfat -F32 {}1 -n {}'.format(self.deviceFilePath, 'WINDOWS')) #TODO: Allow custom label
         print('Formatted')
 
         # Writing to MBR
@@ -87,13 +89,17 @@ class TuxBooter (QDialog):
             print('MBR written')
 
         # Installing syslinux
-        os.system("syslinux -i {}1 >/dev/null 2>&1".format(self.deviceFilePath))
+        self.sudo.syslinux('-i', "{}1".format(self.deviceFilePath))
         print('Syslinux installed')
+
+        # Restore device file original permissions
+        self.sudo.chmod(660, self.deviceFilePath)
+
 
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    window = TuxBooter()
+    window = TuxBooter(str(input('Enter password for root: ')))
     
     window.show()
     sys.exit(app.exec_())

@@ -1,4 +1,4 @@
-from PyQt5.QtCore import QDateTime
+from PyQt5.QtCore import QDateTime, pyqtSignal, QObject
 from PyQt5.QtWidgets import QApplication,\
                             QDialog, \
                             QFileDialog, \
@@ -12,6 +12,11 @@ import sh
 import threading
 import time
 
+
+
+class Signals(QObject):
+    processComplete = pyqtSignal(object)
+    setLabel = pyqtSignal(object)
 
 class TuxBooter (QDialog):
     def __init__(self, sudo_password):
@@ -33,12 +38,16 @@ class TuxBooter (QDialog):
 
         # Startup
         self.refreshUsbList()
+        self.qtSignals = Signals()
 
         # Connects
         self.fileSearch.clicked.connect(self.openFileNameDialog)
         self.usbList.activated.connect(self.setUsbDevice)
         self.refreshUsb.clicked.connect(self.refreshUsbList)
         self.startBtn.clicked.connect(self.burnImage)
+        self.progressBar.valueChanged.connect(self.progressBar.setValue)
+        self.qtSignals.setLabel.connect(self.statusLabel.setText)
+        self.qtSignals.processComplete.connect(self.startBtn.setEnabled)
     
     def refreshUsbList(self):
         self.usbList.clear()
@@ -72,6 +81,7 @@ class TuxBooter (QDialog):
         return usb_devices # List of USB devices
 
     def burnImage(self):
+        self.startBtn.setEnabled(False)
         progressBar = threading.Thread(target=self.copyProgress)
         usbMaker = threading.Thread(target=self.createUSB, args=(progressBar,))
         
@@ -79,22 +89,21 @@ class TuxBooter (QDialog):
         usbMaker.daemon = True
 
         usbMaker.start()
-        # usbMaker.join()
 
     def createUSB(self, progressBar):
-        self.startBtn.setEnabled(False)
+       
         self.prepareDrive()
         self.prepareEnv()
 
         progressBar.start()
-        copytree2(self.workFolders['iso'], self.workFolders['usb'], informStatus=self.statusLabel.setText)
+        copytree2(self.workFolders['iso'], self.workFolders['usb'], informStatus=self.qtSignals.setLabel.emit)
 
-        self.statusLabel.setText('Syncing changes to disk...!')
+        self.qtSignals.setLabel.emit('Syncing changes to disk...!')
         self.destroyEnv()
 
-        self.startBtn.setEnabled(True)
-        self.progressBar.setValue(100)
-        self.statusLabel.setText('Bootable USB completed!')
+        
+        self.progressBar.valueChanged.emit(100)
+        self.qtSignals.setLabel.emit('Bootable USB completed!')
         progressBar.join()
 
     def prepareDrive(self):
@@ -102,50 +111,50 @@ class TuxBooter (QDialog):
         self.sudo.chmod(666, self.deviceFilePath)
 
         # Zeroing MBR
-        self.statusLabel.setText("Writing zeros to MBR...")
+        self.qtSignals.setLabel.emit("Writing zeros to MBR...")
         with open(self.deviceFilePath, 'wb') as usbFile, open('/dev/zero', 'rb') as zeroFile:
             usbFile.write(zeroFile.read(512))
         
         # Formatting device
-        self.statusLabel.setText("Formatting device...")
+        self.qtSignals.setLabel.emit("Formatting device...")
         self.sudo.bash('-c', "echo ',,c;' | sfdisk {}".format(self.deviceFilePath))
 
-        self.progressBar.setValue(1) # Set progress bar to 1% here for psychological effect
+        self.progressBar.valueChanged.emit(1) # Set progress bar to 1% here for psychological effect
         self.sudo.bash('-c', 'mkfs.vfat -F32 {}1 -n {}'.format(self.deviceFilePath, 'WINDOWS')) #TODO: Allow custom label
 
         # Writing to MBR
-        self.statusLabel.setText("Writing to MBR...")
+        self.qtSignals.setLabel.emit("Writing to MBR...")
         with open(self.deviceFilePath, 'wb') as usbFile, open('/usr/lib/syslinux/mbr/mbr.bin', 'rb') as mbrFile:
             usbFile.write(mbrFile.read(440))
 
         # Installing syslinux
-        self.statusLabel.setText("Installing syslinux...")
+        self.qtSignals.setLabel.emit("Installing syslinux...")
         self.sudo.syslinux('-i', "{}1".format(self.deviceFilePath))
 
         # Restore device file original permissions
         self.sudo.chmod(660, self.deviceFilePath)
-        self.statusLabel.setText("Ready to copy files!")
+        self.qtSignals.setLabel.emit("Ready to copy files!")
 
     def prepareEnv(self):
         # Create temporary folders
         sh.mkdir('-p', self.workFolders['usb'], self.workFolders['iso'])
         
         # Mount device and Image file
-        self.statusLabel.setText("Mounting device and image...")
+        self.qtSignals.setLabel.emit("Mounting device and image...")
         self.sudo.mount('-o', 'uid={}'.format(str(sh.whoami()).strip()), '{}1'.format(self.deviceFilePath), self.workFolders['usb'])
         self.sudo.mount('-o', 'loop', '{}'.format(self.imageFilePath), self.workFolders['iso'])
 
         # Copy syslinux modules to usb drive
-        self.statusLabel.setText("Copying syslinux modules...")
+        self.qtSignals.setLabel.emit("Copying syslinux modules...")
         sh.cp('-r', '/usr/lib/syslinux/modules/bios/', self.workFolders['usb'])
         sh.mv(self.workFolders['usb'] + '/bios/', self.workFolders['usb'] + 'syslinux')
 
         # Create syslinux.cfg for Windows boot
-        self.statusLabel.setText("Writing syslinux.cfg...")
+        self.qtSignals.setLabel.emit("Writing syslinux.cfg...")
         with open(self.workFolders['usb'] + 'syslinux/syslinux.cfg', 'w') as f:
             windows_syslinux_cfg = "default boot\nLABEL boot\nMENU LABEL boot\nCOM32 chain.c32\nAPPEND fs ntldr=/bootmgr"
             f.write(windows_syslinux_cfg)
-        self.statusLabel.setText("Config written!")
+        self.qtSignals.setLabel.emit("Config written!")
 
     def copyProgress(self):
         barValue = self.progressBar.value()
@@ -160,14 +169,15 @@ class TuxBooter (QDialog):
             if barValue > 99:
                 barValue = 99 # Again, for psychological effects
             
-            self.progressBar.setValue(barValue)
+            self.progressBar.valueChanged.emit(barValue)
             time.sleep(0.1) # Reduce CPU usage ; There are better ways, but for now sleep works fine
 
     def destroyEnv(self):
         self.sudo.umount(self.imageFilePath)
         self.sudo.umount(self.deviceFilePath+'1')
-        self.statusLabel.setText('Cleaning up...')
+        self.qtSignals.setLabel.emit('Cleaning up...')
         sh.rm('-rf', self.workFolders['tmp'])
+        self.qtSignals.processComplete.emit(True)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

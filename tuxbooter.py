@@ -12,6 +12,74 @@ import sh
 import threading
 import time
 
+#TODO: Added verifications and warnings to missing fields, like USB, Image file...
+
+class WarningBox(QDialog):
+    def __init__(self, text):
+        super(WarningBox, self).__init__()
+        loadUi('ui/warning.ui', self)
+        
+        # Signal-slot connections
+        self.agreeBtn.clicked.connect(self.close)
+        
+        self.msgText.setText(text)
+
+        # Show window
+        self.exec_()
+
+
+class GetSudo(QDialog):
+    def __init__(self):
+        super(GetSudo, self).__init__()
+        loadUi('ui/guisudo.ui', self)
+
+        # Variables
+        self.showingPasswd = False
+        self.sudo = False
+
+        # Signal-slot connections
+        self.eyeButton.clicked.connect(self.showPass)
+        self.buttonBox.accepted.connect(self.accept)
+        self.buttonBox.rejected.connect(self.reject)
+
+        self.exec_()
+
+    def checkPass(self):
+        try:
+            whoami = self.sudo.whoami() # Run simple to command to check
+            return True
+        except Exception as e:
+            del(self.sudo)
+            self.sudo = False
+            return False
+
+    def showPass(self):
+        if not self.showingPasswd:
+            self.passwdEdit.setEchoMode(self.passwdEdit.Normal)
+            self.showingPasswd = True
+            # Set eye icon
+        else:
+            self.passwdEdit.setEchoMode(self.passwdEdit.Password)
+            self.showingPasswd = False
+            # Set slashed eye icon
+
+    def accept(self):
+        self.sudo = sh.sudo.bake("-S", _in=str(self.passwdEdit.text()))
+        # verify pass
+        if self.checkPass():
+            QDialog.accept(self)
+        else:
+            WarningBox("Incorrect password entered!\n\nPlease try again...")
+
+    def reject(self):
+        self.sudo = False
+        QDialog.reject(self)
+
+    def getSudo(self):
+        # This makes sure the sudo inside self.sudo "dies" and only the returning sudo will be used after
+        sudo = self.sudo
+        del(self.sudo)
+        return sudo
 
 
 class Signals(QObject):
@@ -19,12 +87,9 @@ class Signals(QObject):
     setLabel = pyqtSignal(object)
 
 class TuxBooter (QDialog):
-    def __init__(self, sudo_password):
+    def __init__(self):
         super(TuxBooter, self).__init__()
         loadUi('ui/mainWindow.ui', self)
-
-        #TODO: Set this on press start button (ask password)
-        self.sudo = sh.sudo.bake("-S", _in=sudo_password)
 
         # Variables
         self.deviceFilePath = ''
@@ -40,7 +105,7 @@ class TuxBooter (QDialog):
         self.refreshUsbList()
         self.qtSignals = Signals()
 
-        # Connects
+        # Signal-slot connections
         self.fileSearch.clicked.connect(self.openFileNameDialog)
         self.usbList.activated.connect(self.setUsbDevice)
         self.refreshUsb.clicked.connect(self.refreshUsbList)
@@ -81,7 +146,16 @@ class TuxBooter (QDialog):
         return usb_devices # List of USB devices
 
     def burnImage(self):
+        if str(sh.whoami()) is not "root":
+            sudo = GetSudo()
+            self.sudo = sudo.getSudo()
+            if not self.sudo:
+                # Show warning of no permissions
+                print("You need root permissions to continue")
+                return False
+
         self.startBtn.setEnabled(False)
+
         progressBar = threading.Thread(target=self.copyProgress)
         usbMaker = threading.Thread(target=self.createUSB, args=(progressBar,))
         
@@ -179,9 +253,12 @@ class TuxBooter (QDialog):
         sh.rm('-rf', self.workFolders['tmp'])
         self.qtSignals.processComplete.emit(True)
 
+
+
+
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    window = TuxBooter(str(input('Enter password for root: ')))
+    window = TuxBooter()
     
     window.show()
     sys.exit(app.exec_())

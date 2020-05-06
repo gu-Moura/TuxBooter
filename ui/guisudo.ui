@@ -6,18 +6,30 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>218</width>
-    <height>140</height>
+    <width>228</width>
+    <height>180</height>
    </rect>
   </property>
+  <property name="minimumSize">
+   <size>
+    <width>228</width>
+    <height>180</height>
+   </size>
+  </property>
+  <property name="maximumSize">
+   <size>
+    <width>228</width>
+    <height>180</height>
+   </size>
+  </property>
   <property name="windowTitle">
-   <string>Dialog</string>
+   <string>Authentication Required</string>
   </property>
   <widget class="QDialogButtonBox" name="buttonBox">
    <property name="geometry">
     <rect>
-     <x>20</x>
-     <y>90</y>
+     <x>30</x>
+     <y>130</y>
      <width>171</width>
      <height>32</height>
     </rect>
@@ -32,8 +44,8 @@
   <widget class="QLineEdit" name="passwdEdit">
    <property name="geometry">
     <rect>
-     <x>30</x>
-     <y>50</y>
+     <x>40</x>
+     <y>90</y>
      <width>131</width>
      <height>22</height>
     </rect>
@@ -57,27 +69,39 @@
   <widget class="QToolButton" name="eyeButton">
    <property name="geometry">
     <rect>
-     <x>160</x>
-     <y>50</y>
+     <x>170</x>
+     <y>90</y>
      <width>25</width>
      <height>21</height>
     </rect>
    </property>
+   <property name="toolTip">
+    <string>Reveal / Conceal password</string>
+   </property>
    <property name="text">
     <string/>
+   </property>
+   <property name="icon">
+    <iconset>
+     <normaloff>assets/EyeOpen.png</normaloff>assets/EyeOpen.png</iconset>
    </property>
   </widget>
   <widget class="QLabel" name="label">
    <property name="geometry">
     <rect>
-     <x>30</x>
+     <x>20</x>
      <y>10</y>
-     <width>171</width>
-     <height>31</height>
+     <width>191</width>
+     <height>61</height>
     </rect>
    </property>
    <property name="text">
-    <string>Please type your password:</string>
+    <string>This program needs permission to proceed.
+
+Please type your password:</string>
+   </property>
+   <property name="wordWrap">
+    <bool>true</bool>
    </property>
   </widget>
  </widget>

@@ -7,13 +7,13 @@
     <x>0</x>
     <y>0</y>
     <width>240</width>
-    <height>128</height>
+    <height>140</height>
    </rect>
   </property>
   <property name="maximumSize">
    <size>
     <width>240</width>
-    <height>150</height>
+    <height>180</height>
    </size>
   </property>
   <property name="cursor">
@@ -67,7 +67,7 @@
    <property name="geometry">
     <rect>
      <x>1</x>
-     <y>11</y>
+     <y>20</y>
      <width>61</width>
      <height>61</height>
     </rect>
@@ -89,7 +89,7 @@
    <property name="geometry">
     <rect>
      <x>80</x>
-     <y>90</y>
+     <y>100</y>
      <width>81</width>
      <height>22</height>
     </rect>

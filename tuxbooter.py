@@ -3,16 +3,19 @@ from PyQt5.QtWidgets import QApplication,\
                             QDialog, \
                             QFileDialog, \
                             QComboBox
+                            
+from PyQt5.QtGui import QPixmap, QIcon
 from PyQt5.uic import loadUi
 from functools import partial
 from copier import copytree2
+import os.path
 import sys
 import json
 import sh
 import threading
 import time
 
-#TODO: Added verifications and warnings to missing fields, like USB, Image file...
+#TODO: Handle exceptions better, with error messages! Try to unmount disks if possible, confirmation window needed
 
 class WarningBox(QDialog):
     def __init__(self, text):
@@ -57,10 +60,12 @@ class GetSudo(QDialog):
         if not self.showingPasswd:
             self.passwdEdit.setEchoMode(self.passwdEdit.Normal)
             self.showingPasswd = True
+            self.eyeButton.setIcon(QIcon(QPixmap("ui/assets/EyeSlashed.png")))
             # Set eye icon
         else:
             self.passwdEdit.setEchoMode(self.passwdEdit.Password)
             self.showingPasswd = False
+            self.eyeButton.setIcon(QIcon(QPixmap("ui/assets/EyeOpen.png")))
             # Set slashed eye icon
 
     def accept(self):
@@ -69,7 +74,7 @@ class GetSudo(QDialog):
         if self.checkPass():
             QDialog.accept(self)
         else:
-            WarningBox("Incorrect password entered!\n\nPlease try again...")
+            WarningBox("Incorrect password!\n\nPlease try again...")
 
     def reject(self):
         self.sudo = False
@@ -133,7 +138,7 @@ class TuxBooter (QDialog):
         fileName, _ = QFileDialog.getOpenFileName(self,"QFileDialog.getOpenFileName()", "","Image Files (*.iso *.img);;All Files (*)", options=options)
         if fileName:
             self.imgLocation.setText(fileName)
-            self.imageFilePath = fileName
+            
         
     def listAvailableDevices(self):
         devices = sh.lsblk('-pJS', '-o', 'name,tran,model,size')
@@ -146,14 +151,28 @@ class TuxBooter (QDialog):
         return usb_devices # List of USB devices
 
     def burnImage(self):
-        if str(sh.whoami()) is not "root":
+        # Get image file
+        self.imageFilePath = self.imgLocation.text()
+        
+        # Verifications
+        if self.deviceFilePath == '':
+            WarningBox("You must select a USB device first!")
+            return False
+
+        elif not os.path.exists(self.imageFilePath) or not os.path.isfile(self.imageFilePath):
+            WarningBox("You must select a valid disk image file!")
+            return False
+        
+        elif str(sh.whoami()) is not "root":
             sudo = GetSudo()
             self.sudo = sudo.getSudo()
             if not self.sudo:
-                # Show warning of no permissions
-                print("You need root permissions to continue")
+                self.qtSignals.setLabel.emit("Unable to proceed without permission!")
                 return False
 
+        
+
+        # Starts process
         self.startBtn.setEnabled(False)
 
         progressBar = threading.Thread(target=self.copyProgress)

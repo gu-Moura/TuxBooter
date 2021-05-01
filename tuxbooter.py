@@ -187,8 +187,16 @@ class TuxBooter (QDialog):
                 return False
 
         # Starts process
-        self.startBtn.setEnabled(False)
+        unmount, mounted_points = self.checkIfAnyMounted()
 
+        if unmount is True and bool(mounted_points) is True:
+            for mounted_point in mounted_points:
+                self.sudo.umount(mounted_point)
+        elif unmount is False and bool(mounted_points) is True:
+            WarningBox("Unable to continue without unmounting USB device.")
+            return 1
+
+        self.startBtn.setEnabled(False)
         progressBar = threading.Thread(target=self.copyProgress)
         usbMaker = threading.Thread(target=self.createUSB, args=(progressBar,))
 
@@ -198,17 +206,16 @@ class TuxBooter (QDialog):
         usbMaker.start()
 
     def createUSB(self, progressBar):
-       
         self.prepareDrive()
         self.prepareEnv()
 
         progressBar.start()
-        copytree2(self.workFolders['iso'], self.workFolders['usb'], informStatus=self.qtSignals.setLabel.emit)
+        copytree2(self.workFolders['iso'], self.workFolders['usb'],
+                  informStatus=self.qtSignals.setLabel.emit)
 
         self.qtSignals.setLabel.emit('Syncing changes to disk...!')
         self.destroyEnv()
 
-        
         self.progressBar.valueChanged.emit(100)
         self.qtSignals.setLabel.emit('Bootable USB completed!')
         progressBar.join()
@@ -219,12 +226,13 @@ class TuxBooter (QDialog):
 
         # Zeroing MBR
         self.qtSignals.setLabel.emit("Writing zeros to MBR...")
-        with open(self.deviceFilePath, 'wb') as usbFile, open('/dev/zero', 'rb') as zeroFile:
+        with open(self.deviceFilePath, 'wb') as usbFile, \
+             open('/dev/zero', 'rb') as zeroFile:
             usbFile.write(zeroFile.read(512))
 
         # Formatting device
         self.qtSignals.setLabel.emit("Formatting device...")
-        self.sudo.bash('-c', "echo ',,c;' | sfdisk {}".format(self.deviceFilePath))
+        self.sudo.bash('-c', f"echo ',,c;' | sfdisk {self.deviceFilePath}")
 
         self.progressBar.valueChanged.emit(1)  # Set progress bar to 1% here (psychological effect)
         # TODO: Allow custom label
@@ -244,13 +252,50 @@ class TuxBooter (QDialog):
         self.sudo.chmod(660, self.deviceFilePath)
         self.qtSignals.setLabel.emit("Ready to copy files!")
 
+    def checkIfAnyMounted(self):
+        devices_mounted = str(sh.findmnt('-o', 'SOURCE,TARGET', '-J'))
+        isos_mounted = str(self.sudo.losetup('--list', '-J', '-O', 'NAME,BACK-FILE'))
+        filesystems = json.loads(devices_mounted)['filesystems']
+        unmount_device = False
+        usb_mounted = False
+
+        mounted_points = []
+        if filesystems:
+            for filesystem in filesystems:
+                for device in filesystem.get('children'):
+                    if self.deviceFilePath is device.get('source') or \
+                       self.deviceFilePath in device.get('source'):
+                        mounted_points.append(device.get('source'))
+                        usb_mounted = True
+
+        if isos_mounted:
+            isos_mounted = json.loads(isos_mounted)
+            for iso in isos_mounted.get('loopdevices'):
+                if self.imageFilePath is iso.get('back-file') or \
+                   self.imageFilePath in iso.get('back-file'):
+                    mounted_points.append(iso.get('back-file'))
+
+        if usb_mounted:
+            window_title, msg = ("Unmount USB device?",
+                                 f"USB device {self.deviceFilePath} is already mounted!\n" +
+                                 "Would you like to unmount it?")
+            unmount_device = QuestionBox(window_title, msg).result()  # Spawns Question Dialog
+
+        if unmount_device and usb_mounted:
+            return True, mounted_points
+        elif not unmount_device and usb_mounted:
+            return False, mounted_points
+        elif not unmount_device and not usb_mounted:
+            return False, []
+
     def prepareEnv(self):
         # Create temporary folders
         sh.mkdir('-p', self.workFolders['usb'], self.workFolders['iso'])
-        
+
         # Mount device and Image file
         self.qtSignals.setLabel.emit("Mounting device and image...")
-        self.sudo.mount('-o', 'uid={}'.format(str(sh.whoami()).strip()), '{}1'.format(self.deviceFilePath), self.workFolders['usb'])
+        self.sudo.mount('-o', 'uid={}'.format(str(sh.whoami()).strip()),
+                              '{}1'.format(self.deviceFilePath), self.workFolders['usb'])
         self.sudo.mount('-o', 'loop', '{}'.format(self.imageFilePath), self.workFolders['iso'])
 
         # Copy syslinux modules to usb drive

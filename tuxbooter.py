@@ -30,6 +30,21 @@ class WarningBox(QDialog):
         self.exec_()
 
 
+class QuestionBox(QDialog):
+    def __init__(self, windowTitle, text):
+        super(QuestionBox, self).__init__()
+        loadUi('ui/question.ui', self)
+        self.setWindowTitle(windowTitle)
+
+        # Signal-slot connections
+        self.buttonBox.accepted.connect(self.accept)
+        self.buttonBox.rejected.connect(self.reject)
+        self.msgText.setText(text)
+
+        # Show window
+        self.exec_()
+
+
 class GetSudo(QDialog):
     def __init__(self):
         super(GetSudo, self).__init__()

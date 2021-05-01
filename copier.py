@@ -1,8 +1,9 @@
-from shutil import *
+from shutil import copy2, copystat, Error
 import os
 
+
 def copytree2(src, dst, symlinks=False, ignore=None, copy_function=copy2,
-             ignore_dangling_symlinks=False, dirs_exist_ok=True, informStatus=None):
+              ignore_dangling_symlinks=False, dirs_exist_ok=True, informStatus=None):
     """Recursively copy a directory tree.
 
     The destination directory must not already exist.
@@ -49,11 +50,10 @@ def copytree2(src, dst, symlinks=False, ignore=None, copy_function=copy2,
     for name in names:
         if name in ignored_names:
             continue
-        
 
         srcname = os.path.join(src, name)
         dstname = os.path.join(dst, name)
-        
+
         try:
             if os.path.islink(srcname):
                 linkto = os.readlink(srcname)
@@ -70,17 +70,18 @@ def copytree2(src, dst, symlinks=False, ignore=None, copy_function=copy2,
                     # otherwise let the copy occurs. copy2 will raise an error
                     if os.path.isdir(srcname):
                         copytree2(srcname, dstname, symlinks, ignore,
-                                 copy_function, informStatus=informStatus)
+                                  copy_function, informStatus=informStatus)
                     else:
                         if informStatus is not None:
-                            informStatus("Copying \"{}\"".format(srcname.split('/')[-1]))
+                            informStatus(f"Copying \"{srcname.split('/')[-1]}\"")
                         copy_function(srcname, dstname)
             elif os.path.isdir(srcname):
-                copytree2(srcname, dstname, symlinks, ignore, copy_function, informStatus=informStatus)
+                copytree2(srcname, dstname, symlinks, ignore, copy_function,
+                          informStatus=informStatus)
             else:
                 # Will raise a SpecialFileError for unsupported file types
                 if informStatus is not None:
-                    informStatus("Copying \"{}\"".format(srcname.split('/')[-1]))
+                    informStatus(f"Copying \"{srcname.split('/')[-1]}\"")
                 copy_function(srcname, dstname)
         # catch the Error from the recursive copytree so that we can
         # continue with other files

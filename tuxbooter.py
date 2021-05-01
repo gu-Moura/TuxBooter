@@ -1,12 +1,9 @@
-from PyQt5.QtCore import QDateTime, pyqtSignal, QObject
+from PyQt5.QtCore import pyqtSignal, QObject
 from PyQt5.QtWidgets import QApplication,\
                             QDialog, \
-                            QFileDialog, \
-                            QComboBox
-                            
+                            QFileDialog
 from PyQt5.QtGui import QPixmap, QIcon
 from PyQt5.uic import loadUi
-from functools import partial
 from copier import copytree2
 import os.path
 import sys
@@ -15,16 +12,18 @@ import sh
 import threading
 import time
 
-#TODO: Handle exceptions better, with error messages! Try to unmount disks if possible, confirmation window needed
+# TODO: Handle exceptions better, with error messages!
+# TODO: Try to unmount disks if possible, confirmation window needed.
+
 
 class WarningBox(QDialog):
     def __init__(self, text):
         super(WarningBox, self).__init__()
         loadUi('ui/warning.ui', self)
-        
+
         # Signal-slot connections
         self.agreeBtn.clicked.connect(self.close)
-        
+
         self.msgText.setText(text)
 
         # Show window
@@ -49,9 +48,9 @@ class GetSudo(QDialog):
 
     def checkPass(self):
         try:
-            whoami = self.sudo.whoami() # Run simple to command to check
+            self.sudo.whoami()  # Run simple to command to check
             return True
-        except Exception as e:
+        except Exception:
             del(self.sudo)
             self.sudo = False
             return False
@@ -81,7 +80,7 @@ class GetSudo(QDialog):
         QDialog.reject(self)
 
     def getSudo(self):
-        # This makes sure the sudo inside self.sudo "dies" and only the returning sudo will be used after
+        # This makes sure the sudo from self.sudo "dies" and only the returning sudo will be used
         sudo = self.sudo
         del(self.sudo)
         return sudo
@@ -91,6 +90,7 @@ class Signals(QObject):
     processComplete = pyqtSignal(object)
     setLabel = pyqtSignal(object)
 
+
 class TuxBooter (QDialog):
     def __init__(self):
         super(TuxBooter, self).__init__()
@@ -99,9 +99,9 @@ class TuxBooter (QDialog):
         # Variables
         self.deviceFilePath = ''
         self.imageFilePath = ''
-        self.workFolders = { #  Allow user to change them?
-            'tmp': '/tmp/tuxbooter/', 
-            'usb': '/tmp/tuxbooter/usb/', 
+        self.workFolders = {  # Allow user to change them?
+            'tmp': '/tmp/tuxbooter/',
+            'usb': '/tmp/tuxbooter/usb/',
             'iso': '/tmp/tuxbooter/iso/'
         }
         self.totalFilesToCopy = -1
@@ -118,7 +118,7 @@ class TuxBooter (QDialog):
         self.progressBar.valueChanged.connect(self.progressBar.setValue)
         self.qtSignals.setLabel.connect(self.statusLabel.setText)
         self.qtSignals.processComplete.connect(self.startBtn.setEnabled)
-    
+
     def refreshUsbList(self):
         self.usbList.clear()
         self.usbList.addItem('<USB Devices>')
@@ -135,11 +135,12 @@ class TuxBooter (QDialog):
     def openFileNameDialog(self):
         options = QFileDialog.Options()
         options |= QFileDialog.DontUseNativeDialog
-        fileName, _ = QFileDialog.getOpenFileName(self,"QFileDialog.getOpenFileName()", "","Image Files (*.iso *.img);;All Files (*)", options=options)
+        fileName, _ = QFileDialog.getOpenFileName(self, "QFileDialog.getOpenFileName()", "",
+                                                  "Image Files (*.iso *.img);;All Files (*)",
+                                                  options=options)
         if fileName:
             self.imgLocation.setText(fileName)
-            
-        
+
     def listAvailableDevices(self):
         devices = sh.lsblk('-pJS', '-o', 'name,tran,model,size')
         devices = json.loads(str(devices))
@@ -147,13 +148,13 @@ class TuxBooter (QDialog):
         for device in devices["blockdevices"]:
             if 'usb' in device['tran']:
                 usb_devices.append(device)
-        
-        return usb_devices # List of USB devices
+
+        return usb_devices  # List of USB devices
 
     def burnImage(self):
         # Get image file
         self.imageFilePath = self.imgLocation.text()
-        
+
         # Verifications
         if self.deviceFilePath == '':
             WarningBox("You must select a USB device first!")
@@ -162,22 +163,20 @@ class TuxBooter (QDialog):
         elif not os.path.exists(self.imageFilePath) or not os.path.isfile(self.imageFilePath):
             WarningBox("You must select a valid disk image file!")
             return False
-        
-        elif str(sh.whoami()) is not "root":
+
+        elif str(sh.whoami()) != "root":
             sudo = GetSudo()
             self.sudo = sudo.getSudo()
             if not self.sudo:
                 self.qtSignals.setLabel.emit("Unable to proceed without permission!")
                 return False
 
-        
-
         # Starts process
         self.startBtn.setEnabled(False)
 
         progressBar = threading.Thread(target=self.copyProgress)
         usbMaker = threading.Thread(target=self.createUSB, args=(progressBar,))
-        
+
         progressBar.daemon = True
         usbMaker.daemon = True
 
@@ -207,17 +206,19 @@ class TuxBooter (QDialog):
         self.qtSignals.setLabel.emit("Writing zeros to MBR...")
         with open(self.deviceFilePath, 'wb') as usbFile, open('/dev/zero', 'rb') as zeroFile:
             usbFile.write(zeroFile.read(512))
-        
+
         # Formatting device
         self.qtSignals.setLabel.emit("Formatting device...")
         self.sudo.bash('-c', "echo ',,c;' | sfdisk {}".format(self.deviceFilePath))
 
-        self.progressBar.valueChanged.emit(1) # Set progress bar to 1% here for psychological effect
-        self.sudo.bash('-c', 'mkfs.vfat -F32 {}1 -n {}'.format(self.deviceFilePath, 'WINDOWS')) #TODO: Allow custom label
+        self.progressBar.valueChanged.emit(1)  # Set progress bar to 1% here (psychological effect)
+        # TODO: Allow custom label
+        self.sudo.bash('-c', f'mkfs.vfat -F32 {self.deviceFilePath}1 -n WINDOWS')
 
         # Writing to MBR
         self.qtSignals.setLabel.emit("Writing to MBR...")
-        with open(self.deviceFilePath, 'wb') as usbFile, open('/usr/lib/syslinux/mbr/mbr.bin', 'rb') as mbrFile:
+        with open(self.deviceFilePath, 'wb') as usbFile, \
+             open('/usr/lib/syslinux/mbr/mbr.bin', 'rb') as mbrFile:
             usbFile.write(mbrFile.read(440))
 
         # Installing syslinux
@@ -245,7 +246,8 @@ class TuxBooter (QDialog):
         # Create syslinux.cfg for Windows boot
         self.qtSignals.setLabel.emit("Writing syslinux.cfg...")
         with open(self.workFolders['usb'] + 'syslinux/syslinux.cfg', 'w') as f:
-            windows_syslinux_cfg = "default boot\nLABEL boot\nMENU LABEL boot\nCOM32 chain.c32\nAPPEND fs ntldr=/bootmgr"
+            windows_syslinux_cfg = "default boot\nLABEL boot\nMENU LABEL boot\n" + \
+                                   "COM32 chain.c32\nAPPEND fs ntldr=/bootmgr"
             f.write(windows_syslinux_cfg)
         self.qtSignals.setLabel.emit("Config written!")
 
@@ -255,15 +257,15 @@ class TuxBooter (QDialog):
         while barValue < 99:
             if self.totalFilesToCopy == -1:
                 self.totalFilesToCopy = len(list(sh.find(self.workFolders['iso'], '-type', 'f')))
-            
+
             currentFilesCopied = len(list(sh.find(self.workFolders['usb'], '-type', 'f')))
             barValue = 100 * currentFilesCopied / self.totalFilesToCopy
 
             if barValue > 99:
-                barValue = 99 # Again, for psychological effects
-            
+                barValue = 99  # Again, for psychological effects
+
             self.progressBar.valueChanged.emit(barValue)
-            time.sleep(0.1) # Reduce CPU usage ; There are better ways, but for now sleep works fine
+            time.sleep(0.1)  # Reduce CPU usage ; There are better ways, but for now sleep works
 
     def destroyEnv(self):
         self.sudo.umount(self.imageFilePath)
@@ -273,11 +275,8 @@ class TuxBooter (QDialog):
         self.qtSignals.processComplete.emit(True)
 
 
-
-
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = TuxBooter()
-    
     window.show()
     sys.exit(app.exec_())

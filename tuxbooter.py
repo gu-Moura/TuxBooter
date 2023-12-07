@@ -232,11 +232,11 @@ class TuxBooter (QDialog):
 
         # Formatting device
         self.qtSignals.setLabel.emit("Formatting device...")
-        self.sudo.bash('-c', f"echo ',,c;' | sfdisk {self.deviceFilePath}")
+        self.sudo.bash('-c', f"echo ',,7;' | sfdisk {self.deviceFilePath}")
 
         self.progressBar.valueChanged.emit(1)  # Set progress bar to 1% here (psychological effect)
         # TODO: Allow custom label
-        self.sudo.bash('-c', f'mkfs.vfat -F32 {self.deviceFilePath}1 -n WINDOWS')
+        self.sudo.bash('-c', f'mkfs.ntfs -f {self.deviceFilePath}1 -L WINDOWS')
 
         # Writing to MBR
         self.qtSignals.setLabel.emit("Writing to MBR...")
@@ -246,7 +246,10 @@ class TuxBooter (QDialog):
 
         # Installing syslinux
         self.qtSignals.setLabel.emit("Installing syslinux...")
-        self.sudo.syslinux('-i', "{}1".format(self.deviceFilePath))
+        
+        self.sudo.mount(self.deviceFilePath + '1', '/tmp/mnt')
+        self.sudo.extlinux('-i', "{}".format('/tmp/mnt'))
+        self.sudo.umount(self.deviceFilePath + '1')
 
         # Restore device file original permissions
         self.sudo.chmod(660, self.deviceFilePath)
@@ -323,13 +326,18 @@ class TuxBooter (QDialog):
 
             if barValue > 99:
                 barValue = 99  # Again, for psychological effects
+            else:
+                barValue = round(barValue)
 
             self.progressBar.valueChanged.emit(barValue)
             time.sleep(0.1)  # Reduce CPU usage ; There are better ways, but for now sleep works
 
     def destroyEnv(self):
+        print('Unmounting ISO...')
         self.sudo.umount(self.imageFilePath)
+        print('Unmounting USB...')
         self.sudo.umount(self.deviceFilePath+'1')
+        print('Clean up env')
         self.qtSignals.setLabel.emit('Cleaning up...')
         sh.rm('-rf', self.workFolders['tmp'])
         self.qtSignals.processComplete.emit(True)
